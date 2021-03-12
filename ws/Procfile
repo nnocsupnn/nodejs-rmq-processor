@@ -1,0 +1,6 @@
+serverLiveMatch: node build/app.js
+jobDispatcher: node build/dispatcher.js
+garbageCollector: node build/garbageCollector.js
+workerfixture: node build/workers/worker.fixture.js
+workerlvescre: node build/workers/worker.livescore.js
+workermarkets: node build/workers/worker.markets.js

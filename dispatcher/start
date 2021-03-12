@@ -1,0 +1,11 @@
+<?php
+
+require_once __DIR__ . "/vendor/autoload.php";
+
+loadEnvironment();
+
+date_default_timezone_set(env_vars('TZ'));
+
+use RMQ\Collection;
+$app = new Collection;
+$app->start();

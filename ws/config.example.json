@@ -1,0 +1,37 @@
+{
+    "port": 8800,
+    "method": "push",
+    "concurrency": 3,
+    "redis_list": "lm.queues",
+    "log_limit": 1000,
+    "maxJobsPerWorker": 15,
+    "inplayKey": "inplay",
+    "clean_after": 60000,
+    "job_timeout": 3000,
+    "failed_after": 10000,
+    "providers": [8, 74, 145],
+    "redis": {
+        "port": 6379,
+        "port_slave": 6379,
+        "host": "127.0.0.1",
+        "password": "Ccnkbq9V4KDVCyT5FfYpH7ZPhcvisYCf",
+        "db": 1,
+        "expires": "14000",
+        "expire_types": {
+            "fixture": "172800",
+            "livescore": "172800",
+            "markets": "172800"
+        }
+    },
+    "mysql": {
+        "connectionLimit": 1,
+        "host": "127.0.0.1",
+        "user": "dev_rcml",
+        "port": "3306",
+        "password": "dev@2019",
+        "database": "rubyv2"
+    },
+    "origins": [],
+    "telegramBotKey": "1268112558:AAF0-tkWpQ9Go-4IsbMrAP3KHasYmxtgCA0",
+    "telegramChatId": 1223906998
+}

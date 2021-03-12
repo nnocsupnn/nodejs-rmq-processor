@@ -1,0 +1,31 @@
+{
+    "name": "nino/rabbitmq-reciever",
+    "authors": [{
+        "name": "nino.invech3e",
+        "email": "nino.invech3e@gmail.com"
+    }],
+    "require": {
+        "php": ">=7.1",
+        "php-amqplib/php-amqplib": "^2.11",
+        "symfony/dotenv": "^5.0",
+        "illuminate/database": "^6.7",
+        "symfony/var-dumper": "^5.0",
+        "illuminate/support": "^6.7",
+        "illuminate/events": "^6.7",
+        "predis/predis": "^1.1",
+        "unreal4u/telegram-api": "^3.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "RMQ\\": "src",
+            "RMQ\\Traits\\": "src/traits"
+        },
+        "files": [
+            "src/kernel/functions.php"
+        ]
+    },
+    "scripts": {
+        "post-install-cmd": "composer dump-autoload -o --apcu",
+        "post-update-cmd": "composer dump-autoload -o --apcu"
+    }
+}

@@ -1,0 +1,46 @@
+{
+    "name": "sports-socket-server",
+    "version": "1.0.0",
+    "description": "",
+    "main": "app.js",
+    "scripts": {
+        "start": "nf start",
+        "dispatcher": "nf start jobDispatcher=1",
+        "test": "mocha ./build/tests/",
+        "postinstall": "cp config.example.json config.json"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@socket.io/sticky": "^1.0.0",
+        "assert": "^2.0.0",
+        "bluebird": "^3.7.2",
+        "body-parser": "^1.19.0",
+        "bull": "^3.20.1",
+        "bull-arena": "^2.7.1",
+        "bull-board": "^0.6.0",
+        "ejs": "^3.1.6",
+        "foreman": "^3.0.1",
+        "http-auth": "^4.1.2",
+        "http-auth-connect": "^1.0.4",
+        "lodash": "^4.17.15",
+        "moment": "^2.24.0",
+        "moment-timezone": "^0.5.33",
+        "mysql2": "^2.1.0",
+        "node-telegram-bot-api": "^0.50.0",
+        "nodemailer": "^6.4.18",
+        "redis": "^3.0.2",
+        "socket.io": "^3.1.1",
+        "socket.io-msgpack-parser": "^3.0.1",
+        "socket.io-redis": "^6.0.1",
+        "socketio-sticky-session": "^0.4.3",
+        "sticky-session": "^1.1.2",
+        "sync-mysql": "^3.0.1",
+        "throng": "^4.0.0"
+    },
+    "devDependencies": {
+        "debug": "^4.1.1",
+        "mocha": "^7.1.0"
+    }
+}

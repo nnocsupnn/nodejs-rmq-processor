@@ -1,0 +1,9 @@
+{
+    "port": 3020,
+    "secret": "secret12345",
+    "expiration": "3600",
+    "limit": {
+        "duration": 60000,
+        "max": 100
+    }
+}

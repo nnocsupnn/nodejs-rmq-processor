@@ -1,0 +1,14 @@
+node_modules/
+.idea/
+package-lock.json
+connection.bak.json
+
+rmq-feeder/*.html
+rmq-feeder/composer.lock
+rmq-feeder/.env
+rmq-feeder/.env.amq
+rmq-feeder/vendor/
+
+ws/build/test.js
+ws/build/*.html
+ws/config.json
