@@ -639,6 +639,98 @@ const getSnapshot = (redis, prefix, fid, callback = () => {}) => {
     })
 }
 
+ /**
+ * Process bets
+ * Compute baseline
+ */
+const processBets = (providerBets, spid, options = {
+    settled: true
+}) => {
+    let bets = [];
+    const allowedNames = ['X', 'x', '1', '2', 'Over', 'Under'];
+    const notAllowedOdds = ['.25', '.75'];
+
+    providerBets.map((bet, idx) => {
+        let betobj = {}
+        let oddAllowed = true;
+
+        if (_.indexOf(allowedNames, bet['Name']) === -1) return;
+
+        if (_.has(bet, 'BaseLine')) {
+            let baseLineValue = bet.BaseLine
+            let baselineComputed = baseLineValue.toString().split(' ')
+
+            const baseDecimal = baselineComputed.length >= 1 ? baselineComputed[0].match(/(\.\d+)/g) : []
+            if (_.indexOf(notAllowedOdds, _.first(baseDecimal)) >= 0) {
+                oddAllowed = false;
+            }
+
+            if (baselineComputed.length > 1) {
+                let score;
+                if (baselineComputed[1].match(/(\d+.\d+)/g)) {
+                    score = baselineComputed[1].match(/(\d+.\d+)/g)[0]
+                } else {
+                    score = '(0-0)'
+                }
+
+                /**
+                 * Escape basketball for computation
+                 */
+                if (spid === 48242 || spid === '48242') {
+                    betobj.baseline = bet.BaseLine.replace('(0-0)', '')
+                } else {
+                    /**
+                     * Parse to float to automatically compute the string formula
+                     * ex: 8.5 - (1 + 2)
+                     */
+                    let scoreSplit = score.replace(/([()])/g, '').split('-');
+                    let cbaseline = parseFloat(baselineComputed[0]);
+                    cbaseline -= Number(scoreSplit[0]);
+                    cbaseline += Number(scoreSplit[1]);
+                    cbaseline = toFixed(cbaseline, 1);
+
+                    betobj.baseline = String(cbaseline)
+                }
+            } else {
+                betobj.baseline = bet.BaseLine
+            }
+
+            betobj.baselineUncomputed = baseLineValue;
+        }
+
+        /**
+         * @see 294
+         * @description 
+         * Can be updated to this
+         * for lesser line.
+         * 
+         * for (let idx in bet) {
+         *    betobj[String(idx).toLowerCase()] = bet[idx]
+         * }
+         */
+        betobj.id = bet['Id'];
+        betobj.name = bet['Name'];
+        betobj.status = bet['Status'];
+        betobj.startprice = bet['StartPrice'];
+        betobj.price = bet['Price'];
+        betobj.lastupdate = bet['LastUpdate'];
+        betobj.amount = 0; // Not used
+        betobj.price_orig = bet['Price'];
+        betobj.rule_locked = false;
+
+        if (_.has(bet, 'Line')) betobj.line = bet['Line']
+        if (_.has(bet, 'Settlement')) {
+            betobj.settlement = bet['Settlement']
+        } else {
+            options.settled = false
+        }
+
+        if (oddAllowed) bets.push(betobj)
+    })
+
+    return bets;
+}
+
 module.exports = {
     toFixed,
     scanData,
@@ -669,5 +761,6 @@ module.exports = {
     roundTo3,
     isArray,
     isObject,
-    getSnapshot
+    getSnapshot,
+    processBets
 }

@@ -5,7 +5,7 @@ const bluebird = require('bluebird')
 const _ = require('lodash')
 const fs = require('fs')
 const sportPeriods = require('./files/sports_periods.json')
-const { marketGroup, jsonValidator, toFixed, failJob, getRedisBrokers, roundTo3, isArray } = require('./kernel/functions')
+const { marketGroup, jsonValidator, toFixed, failJob, getRedisBrokers, roundTo3, isArray, processBets } = require('./kernel/functions')
 const telegramNotification = require('../build/plugin/TelegramBot/TelegramBot');
 const tz = 'Asia/Seoul';
 
@@ -42,13 +42,14 @@ Array.from(Brokers, (instance, k) => instance.on('error', console.info));
  * All processes by the workers goes here.
  */
 const Processor = {
-    processReturnRate: async function (odds, marketId, spid) {
+    processReturnRate: async function (fixtureid, odds, marketId, spid) {
         try 
         {
+			let leagueId = await Brokers.broker.getAsync(`league:id:${fixtureid}`);
             let results = await Processor.getKeys([
-                `returnrate:${marketId}:${spid}`,
-                `returnratesf:${marketId}:${spid}`,
-                `returnrate:mode`
+                `returnrate:${marketId}:${spid}:${leagueId}`,
+                `returnratesf:${marketId}:${spid}:${leagueId}`,
+                `returnrate:mode`,
             ]);
 
             let returnRate = (results[0] == null ? 0 : results[0]);
@@ -208,14 +209,13 @@ const Processor = {
              * 
              * Data initialization starts here
              */
-            const allowedNames = ['X', 'x', '1', '2', 'Over', 'Under'];
-            const notAllowedOdds = ['.25', '.75'];
-
             let oldBets = JSON.parse(marketSaved),
                 marketUpdate = {},
                 spid = false,
                 provider_sport_id = null,
-                settled = true;
+                processBetOpt = {
+                    settled: true
+                };
 
 
             /**
@@ -292,12 +292,12 @@ const Processor = {
 
             if (marketSaved !== null) {
 
-                let updatebets = processBets(providerBets);
+                let updatebets = processBets(providerBets, spid, processBetOpt);
                 /**
                  * Settlement could be sent per baseline batch. 
                  * it will set to true when the first result/settlement was recieved
                  */
-                marketUpdate.is_settled = settled;
+                marketUpdate.is_settled = processBetOpt.settled;
                 updatebets.map((obj, idx) => {
                     let prevOddIdx = _.findIndex(oldBets.bets, { id: obj.id })
 
@@ -326,7 +326,7 @@ const Processor = {
                     }
                 })
 
-                marketUpdate.bets = await Processor.processReturnRate(oldBets.bets, marketId, spid);
+                marketUpdate.bets = await Processor.processReturnRate(fid, oldBets.bets, marketId, spid);
 
                 job.progress(100);
 
@@ -335,13 +335,13 @@ const Processor = {
                     marketUpdate = {...market }
                 }
 
-                marketUpdate.bets = await Processor.processReturnRate(processBets(providerBets), marketId, spid);
+                marketUpdate.bets = await Processor.processReturnRate(fid, processBets(providerBets, spid, processBetOpt), marketId, spid);
 
                 /**
                  * Settlement could be sent per baseline batch. 
                  * it will set to true when the first result/settlement was recieved
                  */
-                marketUpdate.is_settled = settled;
+                marketUpdate.is_settled = processBetOpt.settled;
                 job.progress(100);
             }
 
@@ -407,96 +407,6 @@ const Processor = {
             /**
              * Finished
              */
-
-
-            /**
-             * Process bets
-             * Compute baseline
-             */
-            function processBets(providerBets) {
-                let bets = [];
-
-                providerBets.map((bet, idx) => {
-                    let betobj = {}
-                    let oddAllowed = true;
-
-                    if (_.indexOf(allowedNames, bet['Name']) === -1) return;
-
-                    if (_.has(bet, 'BaseLine')) {
-                        let baseLineValue = bet.BaseLine
-                        let baselineComputed = baseLineValue.toString().split(' ')
-
-                        const baseDecimal = baselineComputed.length >= 1 ? baselineComputed[0].match(/(\.\d+)/g) : []
-                        if (_.indexOf(notAllowedOdds, _.first(baseDecimal)) >= 0) {
-                            oddAllowed = false;
-                            job.log(`bet/odd not allowed. ${_.first(baseDecimal)}`)
-                        }
-
-                        if (baselineComputed.length > 1) {
-                            let score;
-                            if (baselineComputed[1].match(/(\d+.\d+)/g)) {
-                                score = baselineComputed[1].match(/(\d+.\d+)/g)[0]
-                            } else {
-                                score = '(0-0)'
-                            }
-
-                            /**
-                             * Escape basketball for computation
-                             */
-                            if (spid === 48242 || spid === '48242') {
-                                betobj.baseline = bet.BaseLine.replace('(0-0)', '')
-                            } else {
-                                /**
-                                 * Parse to float to automatically compute the string formula
-                                 * ex: 8.5 - (1 + 2)
-                                 */
-                                let scoreSplit = score.replace(/([()])/g, '').split('-');
-                                let cbaseline = parseFloat(baselineComputed[0]);
-                                cbaseline -= Number(scoreSplit[0]);
-                                cbaseline += Number(scoreSplit[1]);
-                                cbaseline = toFixed(cbaseline, 1);
-
-                                betobj.baseline = String(cbaseline)
-                            }
-                        } else {
-                            betobj.baseline = bet.BaseLine
-                        }
-
-                        betobj.baselineUncomputed = baseLineValue;
-                    }
-
-                    /**
-                     * @see 294
-                     * @description 
-                     * Can be updated to this
-                     * for lesser line.
-                     * 
-                     * for (let idx in bet) {
-                     *    betobj[String(idx).toLowerCase()] = bet[idx]
-                     * }
-                     */
-                    betobj.id = bet['Id'];
-                    betobj.name = bet['Name'];
-                    betobj.status = bet['Status'];
-                    betobj.startprice = bet['StartPrice'];
-                    betobj.price = bet['Price'];
-                    betobj.lastupdate = bet['LastUpdate'];
-                    betobj.amount = 0; // Not used
-                    betobj.price_orig = bet['Price'];
-                    betobj.rule_locked = false;
-
-                    if (_.has(bet, 'Line')) betobj.line = bet['Line']
-                    if (_.has(bet, 'Settlement')) {
-                        betobj.settlement = bet['Settlement']
-                    } else {
-                        settled = false
-                    }
-
-                    if (oddAllowed) bets.push(betobj)
-                })
-
-                return bets;
-            }
         }
     },
 
@@ -708,6 +618,9 @@ const Processor = {
                         [
                             'SET', `sport:id:${fixtureObject.fixture_id}`, fixtureObject.sport.id, 'EX', 86400
                         ],
+                        [
+                            'SET', `league:id:${fixtureObject.fixture_id}`, fixtureObject.sport.league.id, 'EX', 86400
+                        ],
                         // Save fixture
                         [
                             'SET', `${prefixKey}.fixture`,  JSON.stringify(Object.assign({}, fixtureObject)), 'EX', config.redis.expire_types.fixture
@@ -867,6 +780,19 @@ const Processor = {
                 obj.scores = {
                     home: '',
                     away: ''
+                }
+
+
+                if (livescoreSaved) {
+                    /**
+                     * 
+                     * @description
+                     * 
+                     * Add breaktime field on basketball
+                     */
+                    if (livescoreSaved.current.type !== 80 && obj.type === 80 && Number(spid) == 48242) {
+                        obj.breaktime_at = Number(moment().tz(tz).format('x'))
+                    }
                 }
 
                 /**

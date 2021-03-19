@@ -93,6 +93,18 @@ async function parseData(data) {
         const dataType = dbody.Header.Type;
         var msgGuid;
         let priorityKeys = config.providers;
+        let defaultConfig = {
+            "6046": [70, 8, 145],                
+            "35232": [8, 145, 70],               
+            "35709": [8, 145, 70],               
+            "48242": [70, 8, 145],               
+            "54094": [8, 145, 70],               
+            "131506": [8, 145, 70],              
+            "154830": [70, 8, 145],              
+            "154914": [70, 8, 145],              
+            "154919": [8, 145, 70],              
+            "687890": [8, 145, 70]
+        }
 
         /**
          * 
@@ -120,6 +132,11 @@ async function parseData(data) {
 
             case 3 || '3':
             case 35 || '35':
+                /**
+                 * 
+                 * @summary
+                 * SOCCER: (Betway) and (handicap - Bet365 only) > Bet365 > 1xbet
+                 */
                 msgGuid = dbody.Body.Events[0].FixtureId + '-' +  dbody.Header.MsgGuid;
 
                 let availableProviders = await redisInstances.redisMaster.lrangeAsync(`provider:${dbody.Body.Events[0].FixtureId}`, 0, -1).catch(e => {
@@ -133,8 +150,34 @@ async function parseData(data) {
                 
                 for (let x = 0; x < dbody.Body.Events[0].Markets[0].Providers.length; x++) {
                     let provId = dbody.Body.Events[0].Markets[0].Providers[x].Id;
+                    let marketId = dbody.Body.Events[0].Markets[0].Id;
+
+                    /**
+                     * 
+                     * @description
+                     * 
+                     * Exemption handler and job dispatcher
+                     */
+                    let fixtureSport = await redisInstances.redisMaster.getAsync(`sport:id:${dbody.Body.Events[0].FixtureId}`).catch(e => {
+                        return null
+                    });
+
+                    let exemptions = config.market_excemption[String(fixtureSport)] || null;
+                    let marketExemption = _.find(exemptions, { provider: Number(provId), market: Number(marketId) }) || null;
+
                     // Add to Queue
-                    if (availableProviders.includes(provId)) {
+                    if (
+                        availableProviders.includes(provId)
+                        || (
+                            /**
+                             * @description
+                             * Check if there is a exemption config per sport.
+                             */
+                            marketExemption !== null
+                            && Number(provId) === marketExemption.provider
+                            && Number(marketId) === marketExemption.market
+                        )
+                    ) {
                         Queues.marketsQueue.add(dbody, {...jobOption, jobId: msgGuid });
                     }
                 }
@@ -143,13 +186,22 @@ async function parseData(data) {
             /**
              * Keep Alive
              * 
-             * Priority
+             * @description
+             * 8 - Bet365
+             * 70 - BetWay
+             * 145 - 1XBet
              * 
-             * 8
-             * 74
-             * 145
-             * 
-             * {"Header":{"Type":31,"MsgGuid":"b91ad4d3-3fb6-40b3-8a21-20905a67defa","ServerTimestamp":1612117613},"Body":{"KeepAlive":{"ActiveEvents":[6450729,6436190,6445365],"ExtraData":null,"ProviderId":75}},"is_auto":true}
+             * <Priority rules for Inplay>
+             *
+             * @rule Basketball: Betway > Bet365 > 1xbet
+             * @rule Basketball: Betway > Bet365 > 1xbet
+             * @rule Baseball: Bet365 > 1xbet
+             * @rule MMA: Bet365 > 1xbet
+             * @rule AMERICAN FOOTBALL: 
+             * @rule HANDBALL: Bet365 > 1xbet
+             * @rule SOCCER: Betway and (handicap - Bet365 only) > Bet365 > 1xbet
+             * @rule VOLLEYBALL: Betway > Bet365 > 1XBet
+             * @rule E-GAMES: Bet365 > 1XBet
              */
             case 31 || '31':
                 let liveEvents = dbody.Body.KeepAlive.ActiveEvents || [];
@@ -160,7 +212,18 @@ async function parseData(data) {
                 {
                     let evt = liveEvents[i];
                     let rkey = `provider:${evt}`;
+                    
+                    // Check if fixture has sport id to identify priority provider
+                    let fixtureSport = await redisInstances.redisMaster.getAsync(`sport:id:${evt}`).catch(e => {
+                        return null
+                    });
 
+                    priorityKeys = config.sports_provider[String(fixtureSport)] || [8, 70, 145];
+
+					// Exception, dont delete market that are in the exception
+					let exemptions = config.market_excemption[String(fixtureSport)] || null;
+
+                    // Start filtering
                     if (priorityKeys.includes(providerId)) {
                         let availableProviders = await redisInstances.redisMaster.lrangeAsync(rkey, 0, -1).catch(e => {
                             return []
@@ -170,10 +233,10 @@ async function parseData(data) {
                             availableProviders = availableProviders.map(idx => Number(idx))
                         }
 
-                        if (availableProviders.includes(providerId) && providerId === 8 && availableProviders.length === 1) continue;
+                        if (availableProviders.includes(providerId) && providerId === priorityKeys[0] && availableProviders.length === 1) continue;
 
                         // If provider id is first priority. skip and remove the other provider id.
-                        if (Number(providerId) === 8) {
+                        if (Number(providerId) === priorityKeys[0]) {
                             // Remove first provider entried,
                             let toRemove = priorityKeys.filter(id => id !== Number(providerId));
 
@@ -183,7 +246,30 @@ async function parseData(data) {
 
                                 // Remove data using pattern, if priority became available.
                                 redisInstances.redisClient.keys(`livedata.${evt}.markets.*.${rProviderId}`, (error, reply) => {
-                                    if (reply.length) redisInstances.redisClient.del(reply);
+                                    if (reply.length) {
+                                        /**
+                                         * @description Remove all markets thats not equal to the current priority.
+                                         * Exception: 
+                                         * 
+                                         * Soccer - Handicap (Market Id: 3)
+                                         */
+										let toDeleteMarkets = reply;
+										let marketExemption = {}
+										reply.map(cacheKey => {
+											if (cacheKey.split('.').length) {
+												marketExemption = _.find(exemptions, { provider: Number(providerId), market: Number(cacheKey.split('.')[3]) }) || null;
+											}
+										})
+										
+										if (marketExemption !== null && marketExemption.provider === Number(rProviderId)) {
+											toDeleteMarkets = reply.filter(market => {
+												return market !== `livedata.${evt}.markets.${marketExemption.market}.${rProviderId}`
+											})
+										}
+                                        
+
+                                        redisInstances.redisClient.del(toDeleteMarkets);
+                                    }
                                 });
                             }
 
@@ -195,10 +281,10 @@ async function parseData(data) {
 
                         // Second priority
                         if (
-                            Number(providerId) === 74 
+                            Number(providerId) === priorityKeys[1] 
                             && !availableProviders.includes(providerId)
-                            && !availableProviders.includes(8)
-                            && !availableProviders.includes(145)
+                            && !availableProviders.includes(priorityKeys[0])
+                            && !availableProviders.includes(priorityKeys[2])
                         ) {
                             redisInstances.redisClient.lrem(rkey, 0, providerId);
                             redisInstances.redisClient.lpush(rkey, providerId);
@@ -208,10 +294,10 @@ async function parseData(data) {
 
                         // Third priority
                         if (
-                            Number(providerId) === 145 
+                            Number(providerId) === priorityKeys[2] 
                             && !availableProviders.includes(providerId)
-                            && !availableProviders.includes(8)
-                            && !availableProviders.includes(74)
+                            && !availableProviders.includes(priorityKeys[0])
+                            && !availableProviders.includes(priorityKeys[1])
                         ) {
                             redisInstances.redisClient.lrem(rkey, 0, providerId);
                             redisInstances.redisClient.lpush(rkey, providerId);

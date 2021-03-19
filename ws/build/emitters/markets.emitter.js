@@ -35,7 +35,7 @@ module.exports = (Queues, socketEmit, findEmit, liveDataClients, redis) => {
 
             if (market) {
 
-                market.bets = await processReturnRate(market.bets, market.market_id, market.sport_id);
+                market.bets = await processReturnRate(fid, market.bets, market.market_id, market.sport_id);
                 market.fixture_id = Number(fid);
 
                 await redisSetter.setAsync(channel, JSON.stringify(market), 'EX', config.redis.expire_types.markets).catch(e => {
