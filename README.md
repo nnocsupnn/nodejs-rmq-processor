@@ -1,36 +1,4 @@
-## INPLAY/PREMATCH SERVER
-***
-## Repo:
-https://bitbucket.vavasoftware.com/scm/rby/sports-socket.git
-
-***
-## Services on Node Server:
-
-**inplay-pub.service**
-- PHP Application the push data to redis (on the same repo above named rmq-feeder) 
-- OZ , LSPORT Supported
-
-**inplay-sub.service**
-
-- **NodeJS (Bull Queues, Socket, Express)**, parsed data from redis using **brpoplpush** method. (lm.queues)
-- Dashboards - dashmode.mydicegame.net/main and /sub
-- configurations - can be tweaked based on server specs. 
-   - 2 concurrency per worker 15 jobs per worker. (fixture, livescore, markets)
-   - See [config](app/config.json)
-
-**prematch-pub.service**
-- PHP Application the push data to redis (on the same repo above named rmq-feeder) 
-- OZ , LSPORT Supported
-
-**prematch-pub.service**
-
-- **NodeJS (Bull Queues, Express)**, parsed data from redis using **brpoplpush** method. (pm.queues)
-- Dashboards - dashmode.mydicegame.net/main and /sub
-- No socket server. Redis saving only.
-- configurations - can be tweaked based on server specs. 
-   - 2 concurrency per worker 15 jobs per worker. (fixture, livescore, markets)
-   - See [config](prematch/config.json)
-
+## REDIS QUEUE and WORKER
 ***
 ## Redis
 Restarting redis. 
